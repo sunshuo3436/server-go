@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-const BUFF_SIZE = 1024
+const BUFF_SIZE = 2048
 
 var input = make([]byte, BUFF_SIZE)
 
