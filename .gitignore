@@ -1,2 +1,4 @@
 .idea
-bin
+client/bin
+server/bin
+server/data

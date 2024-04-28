@@ -1,3 +1,4 @@
+// 使用 JSON-RPC 客户端与远程 JSON-RPC 服务器通信
 package main
 
 import (
@@ -15,6 +16,7 @@ type Quotient struct {
 }
 
 func main() {
+	//Create a JSON-RPC client that connects to the specified address (port 1234 on the localhost)
 	client, err := jsonrpc.Dial("tcp", "localhost:1234")
 	if err != nil {
 		log.Fatal("dialing:", err)

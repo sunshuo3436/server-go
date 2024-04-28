@@ -2,62 +2,31 @@ package main
 
 import (
 	"errors"
+	"net"
 	"net/http"
+	"net/rpc"
 
-	"github.com/gin-gonic/gin"                         //Gin framework for building web applications
-	"github.com/swaggo/swag/example/celler/controller" //controller package for the example application
-	_ "github.com/swaggo/swag/example/celler/docs"
+	"github.com/gin-gonic/gin"
+	_ "github.com/mattn/go-sqlite3"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+	"github.com/swaggo/swag/example/celler/controller"
 	"github.com/swaggo/swag/example/celler/httputil"
-
-	swaggerFiles "github.com/swaggo/files"     //Integrating Swagger Documentation with the Gin Framework
-	ginSwagger "github.com/swaggo/gin-swagger" //Integrating Swagger Documentation with the Gin Framework
 )
 
-//API 的元信息，包括标题、版本、描述、联系方式、许可证、主机、基础路径和安全定义等
-//	@title			Swagger Example API
-//	@version		1.0
-//	@description	This is a sample server celler server.
-//	@termsOfService	http://swagger.io/terms/
+type Args struct {
+	A, B int
+}
 
-//	@contact.name	API Support
-//	@contact.url	http://www.swagger.io/support
-//	@contact.email	support@swagger.io
+type Arith int
 
-//	@license.name	Apache 2.0
-//	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
-
-//	@host		localhost:8080
-//	@BasePath	/api/v1
-
-//	@securityDefinitions.basic	BasicAuth
-
-//	@securityDefinitions.apikey	ApiKeyAuth
-//	@in							header
-//	@name						Authorization
-//	@description				Description for what is this security definition being used
-
-//	@securitydefinitions.oauth2.application	OAuth2Application
-//	@tokenUrl								https://example.com/oauth/token
-//	@scope.write							Grants write access
-//	@scope.admin							Grants read and write access to administrative information
-
-//	@securitydefinitions.oauth2.implicit	OAuth2Implicit
-//	@authorizationUrl						https://example.com/oauth/authorize
-//	@scope.write							Grants write access
-//	@scope.admin							Grants read and write access to administrative information
-
-//	@securitydefinitions.oauth2.password	OAuth2Password
-//	@tokenUrl								https://example.com/oauth/token
-//	@scope.read								Grants read access
-//	@scope.write							Grants write access
-//	@scope.admin							Grants read and write access to administrative information
-
-//	@securitydefinitions.oauth2.accessCode	OAuth2AccessCode
-//	@tokenUrl								https://example.com/oauth/token
-//	@authorizationUrl						https://example.com/oauth/authorize
-//	@scope.admin							Grants read and write access to administrative information
+func (t *Arith) Multiply(args *Args, reply *int) error {
+	*reply = args.A * args.B
+	return nil
+}
 
 func main() {
+
 	r := gin.Default()              //r用gin引擎
 	c := controller.NewController() //c用controller
 
@@ -94,6 +63,17 @@ func main() {
 	}
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.Run(":8080")
+
+	arith := new(Arith)
+	rpc.Register(arith)
+	rpc.HandleHTTP()
+
+	l, err := net.Listen("tcp", ":1234")
+	if err != nil {
+		panic(err)
+	}
+
+	http.Serve(l, nil)
 }
 
 func auth() gin.HandlerFunc { //用于检查请求中是否包含授权信息
