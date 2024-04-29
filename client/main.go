@@ -1,65 +1,50 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
+	"time"
 )
 
-func sendRequests(url string, numRequests int) {
-	var wg sync.WaitGroup
-	for i := 0; i < numRequests; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					fmt.Println("Recovered from panic:", r)
-				}
-			}()
-			err := performRequest(url)
-			if err != nil {
-				fmt.Println("Error:", err)
-			}
-		}()
-	}
-	wg.Wait()
-	fmt.Println("All requests completed")
-}
-
-func main() {
-	url := "" //"http://101.34.70.9:8080/api/v1/accounts" // Update the URL with server address
-	numRequests := 5
-	sendRequests(url, numRequests)
-}
-
-func performRequest(url string) error {
-	if url == "" {
-		panic("URL cannot be empty")
-	}
-
-	data := map[string]interface{}{
-		"id":   1,
-		"name": "John Doe",
-		"age":  30,
-		// Add other required fields
-	}
-
-	jsonData, err := json.Marshal(data)
+func fetchURL(url string, ch chan<- string) {
+	resp, err := http.Get(url)
 	if err != nil {
-		return err
-	}
-
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
+		ch <- fmt.Sprintf("Error fetching %s: %v", url, err)
+		return
 	}
 	defer resp.Body.Close()
 
-	// Print the response status
-	fmt.Println("Response Status:", resp.Status)
+	if resp.StatusCode != http.StatusOK {
+		ch <- fmt.Sprintf("Error fetching %s: Status %d", url, resp.StatusCode)
+		return
+	}
 
-	return nil
+	ch <- fmt.Sprintf("URL hit: %s", url)
+}
+
+func main() {
+	urls := []string{
+		"https://www.google.com",
+		"https://www.youtube.com",
+		"https://www.amazon.com",
+		"https://www.github.com",
+	}
+
+	ch := make(chan string, len(urls))
+
+	for _, url := range urls {
+		go fetchURL(url, ch)
+	}
+
+	timeout := time.After(2 * time.Second)
+
+	for i := 0; i < len(urls); i++ {
+		select {
+		case res := <-ch:
+			fmt.Println(res)
+		case <-timeout:
+			fmt.Println("Timed out.")
+			return
+		}
+	}
 }
