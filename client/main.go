@@ -1,40 +1,65 @@
-// 使用 JSON-RPC 客户端与远程 JSON-RPC 服务器通信
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"log"
-	"net/rpc/jsonrpc"
+	"net/http"
+	"sync"
 )
 
-type Args struct {
-	A, B int
-}
-
-type Quotient struct {
-	Quo, Rem int
+func sendRequests(url string, numRequests int) {
+	var wg sync.WaitGroup
+	for i := 0; i < numRequests; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Println("Recovered from panic:", r)
+				}
+			}()
+			err := performRequest(url)
+			if err != nil {
+				fmt.Println("Error:", err)
+			}
+		}()
+	}
+	wg.Wait()
+	fmt.Println("All requests completed")
 }
 
 func main() {
-	//Create a JSON-RPC client that connects to the specified address (port 1234 on the localhost)
-	client, err := jsonrpc.Dial("tcp", "localhost:1234")
-	if err != nil {
-		log.Fatal("dialing:", err)
+	url := "" //"http://101.34.70.9:8080/api/v1/accounts" // Update the URL with server address
+	numRequests := 5
+	sendRequests(url, numRequests)
+}
+
+func performRequest(url string) error {
+	if url == "" {
+		panic("URL cannot be empty")
 	}
 
-	args := &Args{7, 8}
-	var reply int
-	err = client.Call("Arith.Multiply", args, &reply)
-	if err != nil {
-		log.Fatal("Multiply error:", err)
+	data := map[string]interface{}{
+		"id":   1,
+		"name": "John Doe",
+		"age":  30,
+		// Add other required fields
 	}
-	fmt.Printf("Multiply: %d*%d=%d\n", args.A, args.B, reply)
 
-	args = &Args{15, 6}
-	var quo Quotient
-	err = client.Call("Arith.Divide", args, &quo)
+	jsonData, err := json.Marshal(data)
 	if err != nil {
-		log.Fatal("Divide error:", err)
+		return err
 	}
-	fmt.Printf("Divide: %d/%d=%d...%d\n", args.A, args.B, quo.Quo, quo.Rem)
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Print the response status
+	fmt.Println("Response Status:", resp.Status)
+
+	return nil
 }

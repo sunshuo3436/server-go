@@ -2,16 +2,13 @@ package main
 
 import (
 	"errors"
-	"net"
-	"net/http"
-	"net/rpc"
-
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/swaggo/swag/example/celler/controller"
 	"github.com/swaggo/swag/example/celler/httputil"
+	"net/http"
 )
 
 type Args struct {
@@ -64,16 +61,18 @@ func main() {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.Run(":8080")
 
-	arith := new(Arith)
-	rpc.Register(arith)
-	rpc.HandleHTTP()
+	/*
+		arith := new(Arith)
+		rpc.Register(arith)
+		rpc.HandleHTTP()
 
-	l, err := net.Listen("tcp", ":1234")
-	if err != nil {
-		panic(err)
-	}
+		l, err := net.Listen("tcp", ":1234")
+		if err != nil {
+			panic(err)
+		}
 
-	http.Serve(l, nil)
+		http.Serve(l, nil)
+	*/
 }
 
 func auth() gin.HandlerFunc { //用于检查请求中是否包含授权信息
