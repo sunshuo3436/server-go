@@ -1,95 +1,78 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
+	"database/sql"
 	"fmt"
-	"net/http"
-	"time"
+	"log"
+
+	"github.com/ethereum/go-ethereum/ethclient"
+	_ "github.com/mattn/go-sqlite3"
 )
 
-type Response struct {
-	URL   string `json:"url"`
-	Error string `json:"error,omitempty"`
-} //存储http请求的相应：url、error，并且转为json
-
-// add fsm
-// Defining types of state and state constants
-// Defining state machine names
-type State int
-
 const (
-	WaitingForResponse State = iota
-	Timeout
-) //Two states of a state machine:WaitingForResponse, timeout
+	localL2 = "https://mainnet.infura.io/v3/c0fd902e8c32475f85909278c7352314"
+	dbPath  = "./block_info.db"
+)
 
-// saving fsm
-// State machine constructs: state name, channel, response
-type StateMachine struct {
-	state     State
-	urlChan   chan Response
-	responses []Response
-}
-
-func (sm *StateMachine) transition() {
-	switch sm.state {
-	case WaitingForResponse:
-		select {
-		case res := <-sm.urlChan:
-			sm.responses = append(sm.responses, res)
-		case <-time.After(2 * time.Second):
-			sm.responses = append(sm.responses, Response{Error: "Timed out"})
-			sm.state = Timeout
-		}
+func recoverPanic() {
+	if r := recover(); r != nil {
+		log.Println("Recovered from panic:", r)
 	}
-}
-
-// receives the URL, sends the response channel, sends the request to http
-func fetchURL(url string, urlChan chan<- Response) {
-	resp, err := http.Get(url)
-	if err != nil {
-		urlChan <- Response{URL: url, Error: fmt.Sprintf("Error: %v", err)}
-		return
-	}
-	defer resp.Body.Close()
-	urlChan <- Response{URL: url}
-}
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	urls := []string{
-		"https://www.google.com",
-		"https://www.youtube.com",
-		"https://www.amazon.com",
-		"https://www.github.com",
-	}
-
-	urlChan := make(chan Response, len(urls)) //创建一个response通道
-
-	sm := StateMachine{
-		state:     WaitingForResponse,
-		urlChan:   urlChan,
-		responses: make([]Response, 0, len(urls)),
-	}
-
-	for _, url := range urls {
-		go fetchURL(url, urlChan)
-	}
-
-	for sm.state != Timeout && len(sm.responses) < len(urls) {
-		sm.transition()
-	}
-
-	jsonData, err := json.Marshal(sm.responses)
-	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(jsonData)
 }
 
 func main() {
-	http.HandleFunc("/rpc", handler)
-	fmt.Println("Server is running at :8080")
-	http.ListenAndServe(":8080", nil)
+	// 连接到以太坊客户端
+	client, err := ethclient.Dial(localL2)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 连接到 SQLite 数据库
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	// 创建表格
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS block_info (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		block_number BIGINT,
+		block_hash TEXT,
+		block_difficulty BIGINT,
+		transaction_count INT
+	)`)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 获取最新的100个区块信息并存储到数据库中
+	for i := int64(0); i < 100; i++ {
+		// 获取区块头
+		header, err := client.HeaderByNumber(context.Background(), nil)
+		if err != nil {
+			log.Println("HeaderByNumber: ", err)
+			continue
+		}
+
+		// 获取区块
+		block, err := client.BlockByNumber(context.Background(), header.Number)
+		if err != nil {
+			log.Println("BlockByNumber: ", err)
+			continue
+		}
+
+		// 插入数据到数据库
+		defer recoverPanic() // 在每次迭代前调用recoverPanic函数
+		_, err = db.Exec(`INSERT INTO block_info (block_number, block_hash, block_difficulty, transaction_count)
+			VALUES (?, ?, ?, ?)`, header.Number.String(), header.Hash().String(), block.Difficulty().Uint64(), len(block.Transactions()))
+		if err != nil {
+			log.Println("Insert into block_info: ", err)
+			continue
+		}
+
+		// 打印区块信息
+		fmt.Printf("Block %d - Hash: %s, Difficulty: %d, Transactions: %d\n", header.Number, header.Hash().String(), block.Difficulty().Uint64(), len(block.Transactions()))
+	}
 }
