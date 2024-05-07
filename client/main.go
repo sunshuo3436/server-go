@@ -2,49 +2,28 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
-	"time"
 )
 
-func fetchURL(url string, ch chan<- string) {
-	resp, err := http.Get(url)
+func main() {
+
+	serverURL := "http://localhost:8080"
+
+	// 发送 GET 请求到服务器的 /blocks 路径
+	resp, err := http.Get(serverURL + "/blocks")
 	if err != nil {
-		ch <- fmt.Sprintf("Error fetching %s: %v", url, err)
-		return
+		log.Fatal("Failed to send request:", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		ch <- fmt.Sprintf("Error fetching %s: Status %d", url, resp.StatusCode)
-		return
+	// 读取服务器返回的响应
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal("Failed to read response:", err)
 	}
 
-	ch <- fmt.Sprintf("URL hit: %s", url)
-}
-
-func main() {
-	urls := []string{
-		"https://www.google.com",
-		"https://www.youtube.com",
-		"https://www.amazon.com",
-		"https://www.github.com",
-	}
-
-	ch := make(chan string, len(urls))
-
-	for _, url := range urls {
-		go fetchURL(url, ch)
-	}
-
-	timeout := time.After(2 * time.Second)
-
-	for i := 0; i < len(urls); i++ {
-		select {
-		case res := <-ch:
-			fmt.Println(res)
-		case <-timeout:
-			fmt.Println("Timed out.")
-			return
-		}
-	}
+	// 打印服务器返回的响应
+	fmt.Println("Server response:", string(body))
 }
